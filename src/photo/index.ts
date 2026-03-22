@@ -1,0 +1,391 @@
+import { formatFocalLength } from '@/focal';
+import { photoHasFilmData } from '@/film';
+import {
+  SHOW_EXIF_DATA,
+  SHOW_FILMS,
+  SHOW_LENSES,
+  SHOW_RECIPES,
+} from '@/app/config';
+import { ABSOLUTE_PATH_HOME_IMAGE } from '@/app/path';
+import { formatDate, formatDateFromPostgresString } from '@/utility/date';
+import {
+  formatAperture,
+  formatIso,
+  formatExposureCompensation,
+  formatExposureTime,
+} from '@/utility/exif-format';
+import { capitalize, parameterize } from '@/utility/string';
+import camelcaseKeys from 'camelcase-keys';
+import { isBefore } from 'date-fns';
+import type { Metadata } from 'next';
+import { FujifilmRecipe } from '@/platforms/fujifilm/recipe';
+import { PhotoUpdateStatus, generatePhotoUpdateStatus } from './update';
+import { AppTextState } from '@/i18n/state';
+import { PhotoColorData } from './color/client';
+
+// INFINITE SCROLL: FULL
+export const INFINITE_SCROLL_FULL_INITIAL =
+  process.env.NODE_ENV === 'development' ? 2 : 12;
+export const INFINITE_SCROLL_FULL_MULTIPLE =
+  process.env.NODE_ENV === 'development' ? 2 : 24;
+
+// INFINITE SCROLL: GRID
+export const INFINITE_SCROLL_GRID_INITIAL =
+  process.env.NODE_ENV === 'development' ? 12 : 60;
+export const INFINITE_SCROLL_GRID_MULTIPLE =
+  process.env.NODE_ENV === 'development' ? 12 : 60;
+
+// Thumbnails below large photos on pages like /p/[photoId]
+export const RELATED_GRID_PHOTOS_TO_SHOW = 12;
+
+export const DEFAULT_ASPECT_RATIO = 1.5;
+
+export const ACCEPTED_PHOTO_FILE_TYPES = [
+  'image/jpg',
+  'image/jpeg',
+  'image/png',
+];
+
+export const MAX_PHOTO_UPLOAD_SIZE_IN_BYTES = 50_000_000;
+
+// Core EXIF data
+export interface PhotoExif {
+  width?: number
+  height?: number
+  aspectRatio: number
+  make?: string
+  model?: string
+  focalLength?: number
+  focalLengthIn35MmFormat?: number
+  lensMake?: string
+  lensModel?: string
+  fNumber?: number
+  iso?: number
+  exposureTime?: number
+  exposureCompensation?: number
+  latitude?: number
+  longitude?: number
+  film?: string
+  recipeData?: string
+  takenAt?: string
+  takenAtNaive?: string
+  // Photo meta potentially located in EXIF/XMP data
+  title?: string
+  caption?: string
+  tags?: string[]
+}
+
+// Raw db insert
+export interface PhotoDbInsert extends PhotoExif {
+  id: string
+  url: string
+  extension: string
+  blurData?: string
+  caption?: string
+  semanticDescription?: string
+  tags?: string[]
+  recipeTitle?: string
+  locationName?: string
+  colorData?: string
+  colorSort?: number
+  priorityOrder?: number
+  excludeFromFeeds?: boolean
+  hidden?: boolean
+  takenAt: string
+  takenAtNaive: string
+}
+
+// Raw db response
+export interface PhotoDb extends
+  Omit<PhotoDbInsert, 'takenAt' | 'tags'> {
+  updatedAt: Date
+  createdAt: Date
+  takenAt: Date
+  tags: string[] | null
+}
+
+// Parsed db response
+export interface Photo extends Omit<PhotoDb, 'recipeData' | 'colorData'> {
+  focalLengthFormatted?: string
+  focalLengthIn35MmFormatFormatted?: string
+  fNumberFormatted?: string
+  isoFormatted?: string
+  exposureTimeFormatted?: string
+  exposureCompensationFormatted?: string
+  takenAtNaiveFormatted: string
+  tags: string[]
+  recipeData?: FujifilmRecipe
+  colorData?: PhotoColorData
+  updateStatus?: PhotoUpdateStatus
+}
+
+export const parsePhotoFromDb = (photoDbRaw: PhotoDb): Photo => {
+  const photoDb = camelcaseKeys(
+    photoDbRaw as unknown as Record<string, unknown>,
+  ) as unknown as PhotoDb;
+  return {
+    ...photoDb,
+    tags: photoDb.tags ?? [],
+    focalLengthFormatted:
+      photoDb.focalLength
+        ? formatFocalLength(photoDb.focalLength)
+        : undefined,
+    focalLengthIn35MmFormatFormatted:
+      photoDb.focalLengthIn35MmFormat
+        ? formatFocalLength(photoDb.focalLengthIn35MmFormat)
+        : undefined,
+    fNumberFormatted:
+      formatAperture(photoDb.fNumber),
+    isoFormatted:
+      formatIso(photoDb.iso),
+    exposureTimeFormatted:
+      formatExposureTime(photoDb.exposureTime),
+    exposureCompensationFormatted:
+      formatExposureCompensation(photoDb.exposureCompensation),
+    takenAtNaiveFormatted:
+      formatDateFromPostgresString(photoDb.takenAtNaive),
+    recipeData: photoDb.recipeData
+      // Legacy check on escaped, string-based JSON
+      ? typeof photoDb.recipeData === 'string'
+        ? JSON.parse(photoDb.recipeData)
+        : photoDb.recipeData
+      : undefined,
+    colorData: photoDb.colorData
+      ? photoDb.colorData
+      : undefined,
+    updateStatus: generatePhotoUpdateStatus(photoDb),
+  } as Photo;
+};
+
+export const parseCachedPhotoDates = (photo: Photo) => ({
+  ...photo,
+  takenAt: new Date(photo.takenAt),
+  updatedAt: new Date(photo.updatedAt),
+  createdAt: new Date(photo.createdAt),
+} as Photo);
+
+export const parseCachedPhotosDates = (photos: Photo[]) =>
+  photos.map(parseCachedPhotoDates);
+
+export const convertPhotoToPhotoDbInsert = (
+  photo: Photo,
+): PhotoDbInsert => ({
+  ...photo,
+  takenAt: photo.takenAt.toISOString(),
+  recipeData: JSON.stringify(photo.recipeData),
+  colorData: JSON.stringify(photo.colorData),
+});
+
+export const descriptionForPhoto = (
+  photo: Photo,
+  includeSemanticDescription?: boolean,
+) =>
+  photo.caption ||
+  (includeSemanticDescription && photo.semanticDescription) ||
+  formatDate({ date: photo.takenAt }).toLocaleUpperCase();
+
+export const getPreviousPhoto = (photo: Photo, photos: Photo[]) => {
+  const index = photos.findIndex(p => p.id === photo.id);
+  return index > 0
+    ? photos[index - 1]
+    : undefined;
+};
+
+export const getNextPhoto = (photo: Photo, photos: Photo[]) => {
+  const index = photos.findIndex(p => p.id === photo.id);
+  return index < photos.length - 1
+    ? photos[index + 1]
+    : undefined;
+};
+
+export const generateOgImageMetaForPhotos = (photos: Photo[]): Metadata => {
+  if (photos.length > 0) {
+    return {
+      openGraph: {
+        images: ABSOLUTE_PATH_HOME_IMAGE,
+      },
+      twitter: {
+        card: 'summary_large_image',
+        images: ABSOLUTE_PATH_HOME_IMAGE,
+      },
+    };
+  } else {
+    // If there are no photos, refrain from showing an OG image
+    return {};
+  }
+};
+
+const PHOTO_ID_FORWARDING_TABLE: Record<string, string> = JSON.parse(
+  process.env.PHOTO_ID_FORWARDING_TABLE || '{}',
+);
+
+export const translatePhotoId = (id: string) =>
+  PHOTO_ID_FORWARDING_TABLE[id] || id;
+
+export const titleForPhoto = (
+  photo: Photo,
+  useDateAsTitle = true,
+  fallback = 'Untitled',
+) => {
+  if (photo.title) {
+    return photo.title;
+  } else if (useDateAsTitle && (photo.takenAt || photo.createdAt)) {
+    return formatDate({
+      date: photo.takenAt || photo.createdAt,
+      length: 'tiny',
+    }).toLocaleUpperCase();
+  } else {
+    return fallback;
+  }
+};
+
+export const altTextForPhoto = (photo: Photo) =>
+  photo.semanticDescription || titleForPhoto(photo);
+
+export const photoLabelForCount = (
+  count: number,
+  appText: AppTextState,
+  _capitalize = true,
+) => {
+  const label = count === 1
+    ? appText.photo.photo
+    : appText.photo.photoPlural;
+  return _capitalize
+    ? capitalize(label)
+    : label.toLocaleLowerCase();
+};
+
+export const photoQuantityText = (
+  count: number,
+  appText: AppTextState,
+  includeParentheses = true,
+  capitalize?: boolean,
+) =>
+  includeParentheses
+    ? `(${count} ${photoLabelForCount(count, appText, capitalize)})`
+    : `${count} ${photoLabelForCount(count, appText, capitalize)}`;  
+
+export const deleteConfirmationTextForPhoto = (
+  photo: Photo,
+  appText: AppTextState,
+) =>
+  appText.admin.deleteConfirm(titleForPhoto(photo));
+
+export type PhotoDateRangePostgres = { start: string, end: string };
+export type PhotoDateRangeFormatted = {
+  start: string,
+  end: string,
+  description: string,
+  descriptionWithSpaces: string,
+};
+
+export const descriptionForPhotoSet = (
+  photos:Photo[] = [],
+  appText: AppTextState,
+  descriptor?: string,
+  dateBased?: boolean,
+  explicitCount?: number,
+  explicitDateRange?: PhotoDateRangePostgres,
+) =>
+  dateBased
+    ? formattedDateRangeForPhotos(photos, explicitDateRange)
+      .description
+      .toLocaleUpperCase()
+    : [
+      explicitCount ?? photos.length, (
+        descriptor ||
+        photoLabelForCount(explicitCount ?? photos.length, appText, false)
+      ),
+    ].join(' ');
+
+const sortPhotosByDateNonDestructively = (
+  photos: Photo[],
+  order: 'ASC' | 'DESC' = 'DESC',
+) =>
+  [...photos].sort((a, b) => order === 'DESC'
+    ? b.takenAt.getTime() - a.takenAt.getTime()
+    : a.takenAt.getTime() - b.takenAt.getTime());
+
+export const formattedDateRangeForPhotos = (
+  photos: Photo[] = [],
+  explicitDateRange?: PhotoDateRangePostgres,
+): PhotoDateRangeFormatted => {
+  let start = '';
+  let end = '';
+  let description = '';
+  let descriptionWithSpaces = '';
+
+  if (explicitDateRange || photos.length > 0) {
+    const photosSorted = sortPhotosByDateNonDestructively(photos);
+    start = formatDateFromPostgresString(
+      explicitDateRange?.start ?? photosSorted[photos.length - 1].takenAtNaive,
+      'short',
+    );
+    end = formatDateFromPostgresString(
+      explicitDateRange?.end ?? photosSorted[0].takenAtNaive,
+      'short',
+    );
+    description = start === end
+      ? start
+      : `${start}–${end}`;
+    descriptionWithSpaces = start === end
+      ? start
+      : `${start} – ${end}`;
+  }
+
+  return { start, end, description, descriptionWithSpaces };
+};
+
+const photoHasCameraData = (photo: Photo) =>
+  Boolean(photo.make) &&
+  Boolean(photo.model);
+
+const photoHasLensData = (photo: Photo) =>
+  Boolean(photo.lensModel);
+
+const photoHasRecipeData = (photo: Photo) =>
+  Boolean(photo.recipeData);
+
+const photoHasExifData = (photo: Photo) =>
+  Boolean(photo.focalLength) ||
+  Boolean(photo.focalLengthIn35MmFormat) ||
+  Boolean(photo.fNumberFormatted) ||
+  Boolean(photo.isoFormatted) ||
+  Boolean(photo.exposureTimeFormatted) ||
+  Boolean(photo.exposureCompensationFormatted);
+
+export const shouldShowCameraDataForPhoto = (photo: Photo) =>
+  SHOW_EXIF_DATA &&
+  photoHasCameraData(photo);
+
+export const shouldShowLensDataForPhoto = (photo: Photo) =>
+  SHOW_EXIF_DATA &&
+  SHOW_LENSES &&
+  photoHasLensData(photo);
+
+export const shouldShowRecipeDataForPhoto = (photo: Photo) =>
+  SHOW_EXIF_DATA &&
+  SHOW_RECIPES &&
+  photoHasRecipeData(photo);
+
+export const shouldShowFilmDataForPhoto = (photo: Photo) =>
+  SHOW_EXIF_DATA &&
+  SHOW_FILMS &&
+  photoHasFilmData(photo);
+
+export const shouldShowExifDataForPhoto = (photo: Photo) =>
+  SHOW_EXIF_DATA && photoHasExifData(photo);
+
+export const getKeywordsForPhoto = (photo: Photo) =>
+  (photo.caption ?? '').split(' ')
+    .concat((photo.semanticDescription ?? '').split(' '))
+    .filter(Boolean)
+    .map(keyword => keyword.toLocaleLowerCase());
+
+export const downloadFileNameForPhoto = (photo: Photo) =>
+  photo.title
+    ? `${parameterize(photo.title)}.${photo.extension}`
+    : photo.url.split('/').pop() || 'download';
+
+export const doesPhotoNeedBlurCompatibility = (photo: Photo) =>
+  isBefore(photo.updatedAt, new Date('2024-05-07'));

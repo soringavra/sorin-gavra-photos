@@ -1,0 +1,93 @@
+import {
+  getCompatibleExifValue,
+  convertApertureValueToFNumber,
+  getDimensionsFromExif,
+  getOffsetFromExif,
+} from '@/utility/exif';
+import {
+  convertTimestampWithOffsetToPostgresString,
+  convertTimestampToNaivePostgresString,
+} from '@/utility/date';
+import { GEO_PRIVACY_ENABLED } from '@/app/config';
+import { PhotoExif } from '..';
+import { FujifilmRecipe } from '@/platforms/fujifilm/recipe';
+import { FujifilmSimulation } from '@/platforms/fujifilm/simulation';
+import type { ExifData, ExifTags } from 'ts-exif-parser';
+import { NikonPictureControl } from '@/platforms/nikon/simulation';
+import { parameterize } from '@/utility/string';
+
+export const convertExifToFormData = (
+  exif: ExifData,
+  exifr?: any,
+  film?: FujifilmSimulation | NikonPictureControl,
+  recipeData?: FujifilmRecipe,
+): Partial<Record<keyof PhotoExif, string | undefined>> => {
+  let title: string | undefined = exifr?.title?.value;
+  let caption: string | undefined;
+  const description: string | undefined =
+    exif.tags?.ImageDescription ||
+    exifr?.ImageDescription ||
+    exifr?.description?.value;
+  const tags: string[] | undefined = exifr?.subject;
+
+  if (title && title !== description) {
+    caption = description;
+  } else {
+    title = description;
+  }
+
+  // Convenience function with exif + exifr in scope
+  const getExifValue = (
+    key: keyof ExifTags,
+    exifrSpecificKey?: string,
+  ) => getCompatibleExifValue(key, exif, exifr, exifrSpecificKey);
+
+  const dateTimeOriginal = getExifValue('DateTimeOriginal');
+  const offset = getOffsetFromExif(exif, exifr);
+
+  const { width, height, aspectRatio } = getDimensionsFromExif(exif, exifr);
+
+  return {
+    ...width && height && {
+      width: width.toString(),
+      height: height.toString(),
+    },
+    aspectRatio: aspectRatio.toString(),
+    make: getExifValue('Make'),
+    model: getExifValue('Model'),
+    focalLength: getExifValue('FocalLength')?.toString(),
+    focalLengthIn35MmFormat:getExifValue('FocalLengthIn35mmFormat')?.toString(),
+    lensMake: getExifValue('LensMake'),
+    lensModel: getExifValue('LensModel'),
+    fNumber: (
+      getExifValue('FNumber')?.toString() ||
+      convertApertureValueToFNumber(getExifValue('ApertureValue'))
+    ),
+    iso:
+      getExifValue('ISO')?.toString() ||
+      getExifValue('ISOSpeed')?.toString(),
+    exposureTime: getExifValue('ExposureTime')?.toString(),
+    exposureCompensation: getExifValue('ExposureCompensation')?.toString(),
+    latitude: !GEO_PRIVACY_ENABLED
+      ? getExifValue('GPSLatitude', 'latitude')?.toString()
+      : undefined,
+    longitude: !GEO_PRIVACY_ENABLED
+      ? getExifValue('GPSLongitude', 'longitude')?.toString()
+      : undefined,
+    // Make sure film is parameterized since
+    // Nikon picture controls may not be parameterized
+    film: film ? parameterize(film) : undefined,
+    recipeData: JSON.stringify(recipeData),
+    ...dateTimeOriginal && {
+      takenAt: convertTimestampWithOffsetToPostgresString(
+        dateTimeOriginal,
+        offset,
+      ),
+      takenAtNaive:
+        convertTimestampToNaivePostgresString(dateTimeOriginal),
+    },
+    ...title && { title },
+    ...caption && { caption },
+    ...Array.isArray(tags) && { tags: tags.join(', ') },
+  };
+};
