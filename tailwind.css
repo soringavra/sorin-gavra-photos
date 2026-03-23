@@ -230,6 +230,8 @@ html {
   /* Core */
   body {
     @apply
+    dark:selection:text-white dark:selection:bg-gray-700
+    selection:text-black selection:bg-gray-300
       font-mono text-sm md:text-base
       text-main
       bg-main
