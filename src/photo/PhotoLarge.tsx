@@ -365,62 +365,60 @@ export default function PhotoLarge({
                   {renderAdminMenu}
                 </div>
                 {showExifContent &&
-                  <>
-                    <ul className="text-medium">
-                      <li>
-                        {photo.focalLength &&
-                          <Link
-                            href={pathForFocalLength(photo.focalLength)}
-                            className="hover:text-main active:text-medium"
+                  <ul className="text-medium">
+                    <li>
+                      {photo.focalLength &&
+                        <Link
+                          href={pathForFocalLength(photo.focalLength)}
+                          className="hover:text-main active:text-medium"
+                        >
+                          {photo.focalLengthFormatted}
+                        </Link>}
+                      {(
+                        photo.focalLengthIn35MmFormatFormatted &&
+                        // eslint-disable-next-line max-len
+                        photo.focalLengthIn35MmFormatFormatted !== photo.focalLengthFormatted
+                      ) &&
+                        <>
+                          {' '}
+                          <Tooltip
+                            content={appText.tooltip['35mm']}
+                            sideOffset={3}
+                            supportMobile
                           >
-                            {photo.focalLengthFormatted}
-                          </Link>}
-                        {(
-                          photo.focalLengthIn35MmFormatFormatted &&
-                          // eslint-disable-next-line max-len
-                          photo.focalLengthIn35MmFormatFormatted !== photo.focalLengthFormatted
-                        ) &&
-                          <>
-                            {' '}
-                            <Tooltip
-                              content={appText.tooltip['35mm']}
-                              sideOffset={3}
-                              supportMobile
+                            <span
+                              className={clsx(
+                                'text-extra-dim',
+                                'decoration-dotted underline-offset-[3px]',
+                                'hover:underline',
+                              )}
                             >
-                              <span
-                                className={clsx(
-                                  'text-extra-dim',
-                                  'decoration-dotted underline-offset-[3px]',
-                                  'hover:underline',
-                                )}
-                              >
-                                {photo.focalLengthIn35MmFormatFormatted}
-                              </span>
-                            </Tooltip>
-                          </>}
-                      </li>
-                      <li>{photo.fNumberFormatted}</li>
-                      <li>{photo.exposureTimeFormatted}</li>
-                      <li>{photo.isoFormatted}</li>
-                      {photo.exposureCompensationFormatted
-                        ? <li>{photo.exposureCompensationFormatted}</li>
-                        : ALWAYS_SHOW_EXPOSURE_COMP && <li>0ev</li>}
-                    </ul>
-                    {showFilmContent && photo.film &&
-                      <PhotoFilm
-                        ref={refPhotoFilm}
-                        film={photo.film}
-                        make={photo.make}
-                        prefetch={prefetchRelatedLinks}
-                        {...photo.recipeData && !photo.recipeTitle && {
-                          toggleRecipeOverlay,
-                          isShowingRecipeOverlay,
-                        }}
-                      />}
-                  </>}
+                              {photo.focalLengthIn35MmFormatFormatted}
+                            </span>
+                          </Tooltip>
+                        </>}
+                    </li>
+                    <li>{photo.fNumberFormatted}</li>
+                    <li>{photo.exposureTimeFormatted}</li>
+                    <li>{photo.isoFormatted}</li>
+                    {photo.exposureCompensationFormatted
+                      ? <li>{photo.exposureCompensationFormatted}</li>
+                      : ALWAYS_SHOW_EXPOSURE_COMP && <li>0ev</li>}
+                  </ul>}
+                {showFilmContent && photo.film &&
+                  <PhotoFilm
+                    ref={refPhotoFilm}
+                    film={photo.film}
+                    make={photo.make}
+                    prefetch={prefetchRelatedLinks}
+                    {...photo.recipeData && !photo.recipeTitle && {
+                      toggleRecipeOverlay,
+                      isShowingRecipeOverlay,
+                    }}
+                  />}
                 <div className={clsx(
                   'flex gap-x-3 gap-y-baseline',
-                  'md:flex-col flex-wrap',
+                  'flex-col flex-wrap',
                   'md:justify-normal',
                 )}>
                   <PhotoDate
