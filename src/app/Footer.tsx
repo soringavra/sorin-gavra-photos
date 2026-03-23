@@ -68,9 +68,8 @@ export default function Footer() {
                     ? <Spinner size={16} className="translate-y-[2px]" />
                     : SHOW_REPO_LINK
                       ? <RepoLink />
-                      : <Link href={PATH_ADMIN_PHOTOS}>
-                        {appText.nav.admin}
-                      </Link>}
+                      : <p>&copy; {new Date().getFullYear()} Sorin Gavra</p>
+                }
               </div>
               <div className="flex items-center h-10 shrink-0">
                 <ThemeSwitcher />
