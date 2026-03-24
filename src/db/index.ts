@@ -152,8 +152,8 @@ export const getWheresFromOptions = (
     wheresValues.push(tag);
   }
   if (film) {
-    wheres.push(`film=$${valuesIndex++}`);
-    wheresValues.push(film);
+    wheres.push(`${parameterizeForDb('film')}=$${valuesIndex++}`);
+    wheresValues.push(parameterize(film));
   }
   if (recipe) {
     wheres.push(`recipe_title=$${valuesIndex++}`);
