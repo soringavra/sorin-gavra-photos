@@ -25,6 +25,7 @@ export default function ResponsiveDate({
     date,
     length,
     timezone,
+    hideTime,
   };
 
   const formatDateDynamic: Parameters<typeof formatDate>[0] = {
@@ -33,8 +34,7 @@ export default function ResponsiveDate({
     hideTime,
   };
 
-  const titleDateFormatted = formatDate(formatDateProps)
-    .toLocaleUpperCase();
+  const titleDateFormatted = formatDate(formatDateProps);
 
   const title = titleLabel
     ? `${titleLabel}: ${titleDateFormatted}`

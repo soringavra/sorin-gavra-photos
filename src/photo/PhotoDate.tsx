@@ -48,7 +48,7 @@ export default function PhotoDate({
     <ResponsiveDate {...{
       date,
       className,
-      titleLabel: getTitleLabel().toLocaleUpperCase(),
+      titleLabel: getTitleLabel(),
       timezone,
       hideTime,
     }} />
