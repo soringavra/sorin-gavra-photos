@@ -361,9 +361,6 @@ export default function PhotoLarge({
                 'space-y-baseline',
                 !hasTitleContent && !hasMetaContent && 'md:-mt-baseline',
               )}>
-                <div className="float-end md:hidden">
-                  {renderAdminMenu}
-                </div>
                 {showExifContent &&
                   <ul className="text-medium">
                     <li>
@@ -484,6 +481,9 @@ export default function PhotoLarge({
                         className="translate-y-[0.5px] md:translate-y-0"
                         photo={photo} 
                       />}
+                    <div className="ml-auto max-md:-translate-y-1 md:hidden">
+                      {renderAdminMenu}
+                    </div>
                   </div>
                   {showStorageCheck &&
                     <AdminPhotoStorageCheck photo={photo} />}
