@@ -182,7 +182,7 @@ export const descriptionForPhoto = (
 ) =>
   photo.caption ||
   (includeSemanticDescription && photo.semanticDescription) ||
-  formatDate({ date: photo.takenAt, hideTime: true }).toLocaleUpperCase();
+  formatDateFromPostgresString(photo.takenAtNaive, 'short').toLocaleUpperCase();
 
 export const getPreviousPhoto = (photo: Photo, photos: Photo[]) => {
   const index = photos.findIndex(p => p.id === photo.id);
